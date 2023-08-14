@@ -1,0 +1,145 @@
+---
+title: "Untitled"
+author: "Weikang Jiang"
+date: "2022-11-25"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+
+```
+
+```{r}
+library(tree)
+library(tidyverse)
+data<-read.csv("NBA_Player_Boxscore_2021-22.csv")
+data = subset(data, athlete_display_name %in% c("Luka Doncic", "Giannis Antetokounmpo"))
+data[which(data$athlete_display_name == "Luka Doncic"), ]$athlete_display_name = "L"
+data[which(data$athlete_display_name == "Giannis Antetokounmpo"), ]$athlete_display_name = "G"
+
+treemodel = tree(as.factor(athlete_display_name)~pts+reb+ast+stl+blk, data, split ="gini")
+result = cv.tree(treemodel, FUN = prune.misclass, K=10)
+result
+par(mfrow = c(1,2))
+plot(result$size,result$dev,type = "b")
+plot(result$k, result$dev, type ="b")
+opt.size = result$size[which.min(result$dev)]
+newtree = prune.misclass(treemodel,best=opt.size)
+
+summary(newtree)
+
+par(mfrow = c(1,1))
+
+
+#not prune tree plot 
+plot(treemodel, type ="uniform")
+text(treemodel, pretty =0)
+
+
+##new tree plot
+plot(newtree, type ="uniform")
+text(newtree, pretty =0)
+
+```
+
+
+```{r}
+library(tree)
+library(tidyverse)
+data<-read.csv("NBA_Player_Boxscore_2021-22.csv")
+data = subset(data, athlete_display_name %in% c("Luka Doncic", "Giannis Antetokounmpo"))
+data[which(data$athlete_display_name == "Luka Doncic"), ]$athlete_display_name = "L"
+data[which(data$athlete_display_name == "Giannis Antetokounmpo"), ]$athlete_display_name = "G"
+
+train = sample(dim(data)[1], 130)
+data.train = data[train,]
+data.test = data[-train,]
+
+treemodel = tree(as.factor(athlete_display_name)~pts+reb+ast+stl+blk,
+                 data.train, split ="gini")
+tree.pred=predict(treemodel,data.train,type="class")
+table(tree.pred,data.train$athlete_display_name)
+
+result = cv.tree(treemodel, FUN = prune.misclass, K=10)
+result
+par(mfrow = c(1,2))
+plot(result$size,result$dev,type = "b")
+plot(result$k, result$dev, type ="b")
+opt.size = result$size[which.min(result$dev)]
+newtree = prune.misclass(treemodel,best=opt.size)
+
+summary(newtree)
+
+par(mfrow = c(1,1))
+
+
+#not prune tree plot 
+plot(treemodel, type ="uniform")
+text(treemodel, pretty =0)
+
+
+##new tree plot
+plot(newtree, type ="uniform")
+text(newtree, pretty =0)
+
+```
+
+```{r}
+num.tree=200
+library(randomForest)
+bag =randomForest(as.factor(athlete_display_name)~pts+reb+ast+stl+blk,
+                  data=data.train, mtry=5,
+                  ntree=num.tree, importance=TRUE, 
+                  xtest=select(data.test, pts, reb, ast, stl, blk), 
+                  ytest=as.factor(data.test$athlete_display_name), 
+                  keep.forest=TRUE)
+bag 
+```
+
+```{r}
+rf =randomForest(as.factor(athlete_display_name)~pts+reb+ast+stl+blk, 
+                   data=data.train, mtry=5, 
+                   ntree=num.tree, importance=TRUE, 
+                   xtest=select(data.test, pts, reb, ast, stl, blk), 
+                  ytest=as.factor(data.test$athlete_display_name),
+                  keep.forest=TRUE)
+rf
+```
+
+```{r}
+plot(1:num.tree, bag$test$err.rate[,1], ylim=c(0.1, 0.6), type="l",
+     xlab="Number of Trees", ylab="Error Rate") 
+lines(1:num.tree, bag$err.rate[,1], type="l", col=2) 
+lines(1:num.tree, rf$test$err.rate[,1], ylim=c(0.1, 0.6), type="l", col =3)
+lines(1:num.tree, rf$err.rate[,1], type="l", col=4) 
+legend("topright", lty=c(1,1,1,1), col=c(1:4),
+       legend=c("Bagging: Test", "Bagging: OOB", "Random Forest: Test", "Random Forest: OOB"))
+```
+
+```{r}
+which.min(bag$err.rate[ ,1])
+which.min(bag$test$err.rate[ ,1])
+which.min(rf$err.rate[ ,1])
+which.min(rf$test$err.rate[ ,1])
+```
+
+
+```{r}
+pred.prob.tree=predict(newtree, data.test)[,2] 
+pred.prob.rf=predict(rf, newdata=data.test, type="prob")[ ,2]
+pred.prob.bag=predict(bag, newdata=data.test, type="prob")[ ,2]
+library(pROC)
+par(mfrow=c(1,3))
+roc(data.test$athlete_display_name, pred.prob.tree, plot=TRUE, print.auc=
+      TRUE, main="Single Tree")
+roc(data.test$athlete_display_name, pred.prob.bag, plot=TRUE, print.auc=
+      TRUE, main="Bagging")
+roc(data.test$athlete_display_name, pred.prob.rf , plot=TRUE, print.auc=
+      TRUE, main="Random Forest")
+```
+
